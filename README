@@ -1,0 +1,126 @@
+-------
+# README
+-------
+This is the README for the project CDN(Content Delivery Network)
+
+Team Members: 
+Rahul Bahal
+Kevin Abraham
+
+-------------
+## Execution
+-------------
+1. deployCDN, runCDN and stopCDN:
+./[deploy|run|stop]CDN -p <port> -o <origin> -n <name> -u <username> -i <keyfile>
+
+2. HTTP Server:
+./httpserver -p <port> -o <origin>
+
+3. DNS Server:
+./dnsserver -p <port> -n <name>
+
+-------------
+## Milestone
+-------------
+1. DNSServer
+Approach:
+The DNS server performs the resolution of incoming DNS Queries by sending response in form of a DNS Answer. We first decapsulated the incoming DNS request packet and extract the client's IP along with other fields. Then, we construct the DNS response packet which contains an Answer frame that includes the IP which the client will use to perform his request.
+
+The DNSServer can be executed using
+./dnsserver -p <port> -n <name>
+
+2. HTTPServer
+Approach:
+The custom HTTPserver was written by overriding the do_GET() in HTTPServer built-in class in Python. Howeer, the core functionality remains similar. If the file is not present in the current server, a request is sent to the origin to deliver that content and a copy may be stored depending upon our future logic and decisions regarding the CDN project. If it is present, the file is served from the current sever.
+
+The HTTPServer can be executed using
+./httpserver -p <port> -o <origin>
+
+------------------------
+## Directory Structure
+------------------------
+The project has 2 main components: DNS Server and HTTP Server and the directory structure that 
+is followed is pretty straightforward and is divided into two main folders "dns" and "http".
+The details for the core files present in these directories is explained below in the Design and Functionality section.
+
+------------------------------------
+## Design and Functionality
+------------------------------------
+1. dnsserver.py: 
+This file is responsible for launching the two main servers that run simultaneously: PrimaryServer and SecondaryServer.
+
+2. PrimaryServer.py:
+This contains the implentation of the primary server which is used to launch the Secondary server to handle incoming DNS queries and also the rtt_statistics server which is used to implement the rtt_statistics server to communicate with the replica severs.
+
+3. SecondaryServer.py:
+The secondary server contains the core logic required to receive and resolve the DNS requests made by the client. The incoming query is resolved by sending the IP address of one of the replica servers which the client will subsequently contact to fetch the requested page.
+
+In order to respond with the IP of the replica that will give the client best response time, the SecondaryServer makes use of rtt_statistics. Using this, the HTTP replica gets the information of the client to perform the ping test and send the RTT result back to the DNS server. The rest of the logic for determining the best replica is explained in the Algorithm section.
+
+4. rtt_statistics.py
+The rtt_statistics keeps a track of the response timings between a client and the replicas. When a client makes a request for the first time, he is randomly sent a reply to any one of the replicas. The replica also performs a ping test with the client in the background in case there is not a corresponding entry for the RTT and updates the information on the DNS server side.
+
+5. httpserver.py:
+The server is initialized and handles the incoming get requests. It also makes use of LRU cache internally to manage the map that stores information about the cached files and their sizes.
+
+6. lrucache.py:
+It contains the class that handles the LRU cache and contains the logic to add, remove and update the entries.
+
+The cached files are stored in the cache folder. The cache folder is generated when the http server is first run in the machine. The size of the cache folder is currently set to 10MB.
+
+7. pinger.py
+Pinger performs a ping test with the target client and sends the test results back to the DNS server side. In order to perform an efficient ping, it uses the script ping.sh which stops sending the ping packets as soon as it receives a response.
+
+8. ping.sh
+This script sends ping packets (upto 5) and stops as soon as a response is received.
+
+----------------------------------------
+## Algorithm for Selecting Best Replica
+----------------------------------------
+The data structure used for keeping a track of the IP and the RTT values for that client and the replicas is described below:
+
+--> {client_ip: {record}}
+
+--> {<String>: {<String>: <FLOAT>, <String>: <FLOAT>, ......., <String>: <FLOAT>} }
+
+--> {client_ip: {REPLICA_1: RTT, REPLICA_2: RTT, ...... , REPLICA_9: RTT}}
+
+
+Replica Selection Algorithm by DNS Server:
+1. If the client record is not present in case the client makes the request for the first time, then: 
+	a) Initialize an entry for the client in the dictionary with all the replicas set to -1 initially.
+	b) Add this record to the main dictionary corresponding to the client.
+2. Send this client a random IP of a HTTP replica. 
+3. Send a request to the HTTP replica to perform a ping test (service running on port 50010 - on both DNS and HTTP replica and required for our implentation) with this client.
+4. Retrieve and update the RTT value for this replica and the client.
+5. Perform step 3 and 4 till values for all replicas have been recorded for a client.
+6. If the client record contains the RTT values for all the replicas, select the replica with the minimum RTT value.
+
+Q. Why is this a good approach?
+A. This is a better approach as compared to active measurement because it is running in the background and does'nt use as much network bandwidth as compared to active.
+This proves to be much easier to modify once implemented to improve efficiency, however it is more difficult to implement as compared to active measurement.
+
+-------------------------------
+## Challenges and Future Scope
+-------------------------------
+Challenges:
+1. Selection of best replica required a lot of thought as that was the probably the most important part of this project.
+2. LRU cache implementation required close attention in order to keep the cache size under 10 MB on the replica.
+4. Coordination between the HTTP replica and DNS server side to coordinate the requests in order to update the rtt_statistics.
+
+Future Scope:
+If given a little more time(say about 10-14 days), the features that would be targetted to make the CDN better will be:
+
+1. Involve geo location and server load and traceroute in evaluation of the best replica.
+2. Also, integrate page rank for a page to determine it's position in the cache on the replica. 
+
+--------------
+## References
+--------------
+1)https://docs.python.org/2/library/socketserver.html#socketserver-udpserver-example
+2)http://www.ccs.neu.edu/home/amislove/teaching/cs4700/fall09/handouts/project1-primer.pdf
+3)https://docs.python.org/2/library/basehttpserver.html
+4)http://www.acmesystems.it/python_httpd
+5)https://gist.github.com/bxt/5195500
+6)http://ip-api.com/docs/api:newline_separated
+-------------------------------------------------------------------------------
